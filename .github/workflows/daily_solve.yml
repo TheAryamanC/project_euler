@@ -46,8 +46,9 @@ jobs:
 
       - name: Solve next problem
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PE_USERNAME:    ${{ secrets.PE_USERNAME }}
-          PE_PASSWORD:    ${{ secrets.PE_PASSWORD }}
-          GIT_PUSH:       "true"
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LLM_PROVIDER:     "deepseek"
+          PE_USERNAME:      ${{ secrets.PE_USERNAME }}
+          PE_PASSWORD:      ${{ secrets.PE_PASSWORD }}
+          GIT_PUSH:         "true"
         run: python -m automation.run_daily

@@ -41,7 +41,12 @@ class ProjectEulerClient:
         try:
             cookies = json.loads(PE_COOKIE_FILE.read_text(encoding="utf-8"))
             for c in cookies:
-                self.session.cookies.set(c["name"], c["value"], domain=c.get("domain"))
+                name = c["name"]
+                value = c["value"]
+                if name.startswith("__Host-") or name.startswith("__Secure-"):
+                    self.session.cookies.set(name, value, domain="", path="/")
+                else:
+                    self.session.cookies.set(name, value, domain=c.get("domain", ""))
             logger.debug("Loaded %d cookies from %s", len(cookies), PE_COOKIE_FILE)
         except Exception as exc:
             logger.warning("Could not load cookie file %s: %s", PE_COOKIE_FILE, exc)
@@ -62,8 +67,11 @@ class ProjectEulerClient:
         """Return True if the current session is already authenticated."""
         try:
             resp = self.session.get(f"{_BASE}/account", timeout=15, allow_redirects=True)
-            soup = BeautifulSoup(resp.text, "lxml")
-            return bool(soup.find("a", href=lambda h: h and "sign_out" in h))
+            # Redirected back to sign_in means the session is expired
+            if "sign_in" in resp.url:
+                return False
+            body = resp.text.lower()
+            return any(kw in body for kw in ["sign_out", "sign out", "problems solved", "level "])
         except Exception:
             return False
 
@@ -199,7 +207,15 @@ class ProjectEulerClient:
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
 
-        form = soup.find("form", method=lambda m: m and m.lower() == "post")
+        form = None
+        # Find the form that has an answer (guess) input field, not sign_out etc.
+        for f in soup.find_all("form", method=lambda m: m and m.lower() == "post"):
+            if any("guess" in (inp.get("name") or "").lower() for inp in f.find_all("input")):
+                form = f
+                break
+        if form is None:
+            # Fallback: form whose action contains "problem=N"
+            form = soup.find("form", action=lambda a: a and f"problem={problem_number}" in (a or ""))
         if form is None:
             raise RuntimeError(
                 f"Answer submission form not found for problem {problem_number}"
