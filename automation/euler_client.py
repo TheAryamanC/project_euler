@@ -208,6 +208,12 @@ class ProjectEulerClient:
         soup = BeautifulSoup(resp.text, "lxml")
 
         form = None
+        # Detect already-solved page (form has no guess input, shows "Completed")
+        body_lower = resp.text.lower()
+        if any(kw in body_lower for kw in ["completed on", "already solved", "you have already", "previously solved"]):
+            logger.info("Problem %d already solved – treating as success", problem_number)
+            return True
+
         # Find the form that has an answer (guess) input field, not sign_out etc.
         for f in soup.find_all("form", method=lambda m: m and m.lower() == "post"):
             if any("guess" in (inp.get("name") or "").lower() for inp in f.find_all("input")):
