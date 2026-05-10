@@ -1,0 +1,53 @@
+name: Daily Project Euler Solver
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # runs every day at 9:00 AM UTC
+  workflow_dispatch: # also allows a manual run from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Restore session cookies
+        env:
+          PE_COOKIES_B64: ${{ secrets.PE_COOKIES_B64 }}
+        run: |
+          if [ -n "$PE_COOKIES_B64" ]; then
+            echo "$PE_COOKIES_B64" | base64 --decode > automation/cookies.json
+            echo "cookies.json restored from secret"
+          else
+            echo "PE_COOKIES_B64 not set – will attempt form login (may fail on CAPTCHA)"
+          fi
+
+      - name: Solve next problem
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PE_USERNAME:    ${{ secrets.PE_USERNAME }}
+          PE_PASSWORD:    ${{ secrets.PE_PASSWORD }}
+          GIT_PUSH:       "true"
+        run: python -m automation.run_daily

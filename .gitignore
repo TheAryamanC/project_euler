@@ -1,0 +1,17 @@
+automation/cookies.json
+
+# Local environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Temporary solver files created during a run
+_tmp_p*.py
+
+# Editor / OS
+.vscode/
+.DS_Store
