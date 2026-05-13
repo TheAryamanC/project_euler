@@ -55,16 +55,20 @@ def _browser_mode() -> None:
             page = ctx.new_page()
             page.goto(_LOGIN_URL, timeout=30_000)
 
-            print("Waiting for login", end="", flush=True)
+            print("Waiting for login (log in to Project Euler in the browser window)", end="", flush=True)
             while True:
                 try:
                     page.wait_for_timeout(2_000)
 
                     # Check current URL and page content without navigating
                     current_url = page.url
-                    content = page.content().lower()
+                    try:
+                        content = page.content().lower()
+                    except Exception:
+                        # Page may be mid-navigation; wait and retry
+                        print(".", end="", flush=True)
+                        continue
 
-                    not_on_login = "sign_in" not in current_url
                     has_logged_in_content = any([
                         "sign_out" in content,
                         "sign out" in content,
@@ -73,16 +77,16 @@ def _browser_mode() -> None:
                         "level " in content,
                     ])
 
-                    if not_on_login and has_logged_in_content:
+                    if has_logged_in_content:
                         break
 
                     print(".", end="", flush=True)
 
                 except KeyboardInterrupt:
                     raise
-                except Exception:
-                    print("\nBrowser closed before login detected. Try again.")
-                    sys.exit(1)
+                except Exception as exc:
+                    # Transient errors (navigation, detached frames) — keep polling
+                    print(f"\n[retrying after: {exc}]", end="", flush=True)
 
             print("\nLogin detected — extracting cookies...")
             raw_cookies = ctx.cookies()

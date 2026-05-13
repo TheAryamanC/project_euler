@@ -46,9 +46,10 @@ jobs:
 
       - name: Solve next problem
         env:
-          GROQ_API_KEY:  ${{ secrets.GROQ_API_KEY }}
-          LLM_PROVIDER:  "groq"
-          PE_USERNAME:   ${{ secrets.PE_USERNAME }}
-          PE_PASSWORD:   ${{ secrets.PE_PASSWORD }}
-          GIT_PUSH:      "true"
+          GROQ_API_KEY:     ${{ secrets.GROQ_API_KEY }}
+          LLM_PROVIDER:     "groq"
+          PE_USERNAME:      ${{ secrets.PE_USERNAME }}
+          PE_PASSWORD:      ${{ secrets.PE_PASSWORD }}
+          PE_COOKIES_B64:   ${{ secrets.PE_COOKIES_B64 }}
+          GIT_PUSH:         "true"
         run: python -m automation.run_daily

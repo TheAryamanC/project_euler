@@ -35,21 +35,45 @@ class ProjectEulerClient:
         self._load_cookies()
 
     def _load_cookies(self) -> None:
-        """Populate the session from cookies.json if it exists"""
-        if not PE_COOKIE_FILE or not PE_COOKIE_FILE.exists():
-            return
+        """Populate the session from cookies.json if it exists.
+
+        Tries PE_COOKIES_B64 env var first (base64-encoded JSON), then falls
+        back to the cookies.json file on disk.
+        """
+        import base64, os as _os
+
+        raw: Optional[str] = None
+        b64 = _os.environ.get("PE_COOKIES_B64", "")
+        if b64:
+            try:
+                raw = base64.b64decode(b64).decode("utf-8")
+                logger.debug("Loaded cookies from PE_COOKIES_B64 env var")
+            except Exception as exc:
+                logger.warning("Could not decode PE_COOKIES_B64: %s", exc)
+
+        if raw is None:
+            if not PE_COOKIE_FILE or not PE_COOKIE_FILE.exists():
+                return
+            try:
+                raw = PE_COOKIE_FILE.read_text(encoding="utf-8")
+            except Exception as exc:
+                logger.warning("Could not read cookie file %s: %s", PE_COOKIE_FILE, exc)
+                return
+
         try:
-            cookies = json.loads(PE_COOKIE_FILE.read_text(encoding="utf-8"))
+            cookies = json.loads(raw)
             for c in cookies:
                 name = c["name"]
                 value = c["value"]
-                if name.startswith("__Host-") or name.startswith("__Secure-"):
-                    self.session.cookies.set(name, value, domain="", path="/")
-                else:
-                    self.session.cookies.set(name, value, domain=c.get("domain", ""))
-            logger.debug("Loaded %d cookies from %s", len(cookies), PE_COOKIE_FILE)
+                # Use the stored domain for all cookies.
+                # __Host- / __Secure- prefixes are browser security constraints
+                # that don't apply to the requests library — we just need the
+                # real domain so the cookie is actually sent.
+                domain = c.get("domain", "projecteuler.net")
+                self.session.cookies.set(name, value, domain=domain, path="/")
+            logger.debug("Loaded %d cookies", len(cookies))
         except Exception as exc:
-            logger.warning("Could not load cookie file %s: %s", PE_COOKIE_FILE, exc)
+            logger.warning("Could not parse cookies: %s", exc)
 
     def _save_cookies(self) -> None:
         """Persist current session cookies to cookies.json for future runs."""
