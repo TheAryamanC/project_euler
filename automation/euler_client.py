@@ -7,14 +7,14 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from .config import PE_USERNAME, PE_PASSWORD, PE_COOKIE_FILE, REPO_ROOT
+from .config import PE_COOKIE_FILE, REPO_ROOT
 
 _DATA_EXTENSIONS = {".txt", ".csv", ".dat", ".gz", ".zip", ".rtf"} # for supplemental files
 
 logger = logging.getLogger(__name__)
 
 _BASE = "https://projecteuler.net"
-_LOGIN_URL = f"{_BASE}/sign_in"
+_SIGN_IN_URL = f"{_BASE}/sign_in"
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) "
@@ -99,61 +99,43 @@ class ProjectEulerClient:
         except Exception:
             return False
 
-    def login(self) -> bool:
-        """Log into Project Euler"""
+    def ensure_session(self) -> bool:
+        """Return True if a valid, human-established Project Euler session exists.
+
+        This bot deliberately never submits credentials to the sign-in form:
+        Project Euler protects that form with a CAPTCHA specifically to block
+        automated logins, and defeating it would violate their terms. Instead a
+        human logs in once and exports the session cookie::
+
+            python -m automation.export_cookies
+
+        Here we only *validate and reuse* that human-established session. When it
+        is missing or expired we return False so the caller can skip answer
+        submission (the solve-and-commit pipeline works fine without it).
+        """
         if self._is_session_valid():
-            logger.info("Session cookie still valid - skipping login form")
+            logger.info("Project Euler session cookie is valid — submission enabled")
             self._logged_in = True
             return True
 
-        logger.info("Saved session expired or missing - attempting form login")
-        resp = self.session.get(_LOGIN_URL, timeout=30)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "lxml")
-
-        form = soup.find("form", method=lambda m: m and m.lower() == "post")
-        if form is None:
-            logger.error("Login form not found on sign-in page")
-            return False
-
-        # Collect all form fields (includes hidden CSRF tokens etc.)
-        payload: dict[str, str] = {}
-        for inp in form.find_all("input"):
-            name = inp.get("name")
-            if name:
-                payload[name] = inp.get("value", "")
-
-        payload["username"] = PE_USERNAME
-        payload["password"] = PE_PASSWORD
-
-        submit_btn = form.find("input", {"type": "submit"})
-        if submit_btn and submit_btn.get("name"):
-            payload[submit_btn["name"]] = submit_btn.get("value", "Sign In")
-
-        action = form.get("action") or _LOGIN_URL
-        if not action.startswith("http"):
-            action = _BASE + "/" + action.lstrip("/")
-
-        resp = self.session.post(action, data=payload, timeout=30, allow_redirects=True)
-        resp.raise_for_status()
-
-        soup = BeautifulSoup(resp.text, "lxml")
-        signed_in = bool(soup.find("a", href=lambda h: h and "sign_out" in h))
-        if signed_in:
-            logger.info("Logged in to Project Euler as %s via form", PE_USERNAME)
-            self._logged_in = True
-            self._save_cookies()  # persist so the next run skips the form
-            return True
-
-        logger.error(
-            "Form login failed. If a CAPTCHA was shown, run:\n"
-            "  python -m automation.export_cookies\n"
-            "to refresh your session cookies."
+        logger.warning(
+            "No valid Project Euler session cookie found; answer submission will "
+            "be skipped. To enable submission, log in yourself (solving the "
+            "CAPTCHA) and export a fresh session cookie:\n"
+            "    python -m automation.export_cookies\n"
+            "then provide it via the PE_COOKIES_B64 secret / cookies.json. "
+            "Project Euler's sign-in CAPTCHA blocks automated login by design, "
+            "so a human must establish the session."
         )
+        self._logged_in = False
         return False
 
     def get_problem(self, number: int) -> dict:
-        """Get problem and download any additional data files"""
+        """Get problem and download any additional data files.
+
+        Project Euler problem statements are public — no login required — so this
+        works whether or not a session cookie is present.
+        """
         url = f"{_BASE}/problem={number}"
         resp = self.session.get(url, timeout=30)
         resp.raise_for_status()
@@ -168,6 +150,19 @@ class ProjectEulerClient:
             soup.find("div", class_="problem_content")
             or soup.find("div", id="problem_content")
         )
+        if content_div is None:
+            # Fall back to the public minimal endpoint, which returns just the raw
+            # problem HTML fragment (no page chrome). This is more stable than the
+            # full page layout.
+            logger.info(
+                "problem_content div not found on full page for problem %d; "
+                "falling back to the public minimal=%d endpoint",
+                number,
+                number,
+            )
+            minimal = self.session.get(f"{_BASE}/minimal={number}", timeout=30)
+            minimal.raise_for_status()
+            content_div = BeautifulSoup(f"<div>{minimal.text}</div>", "lxml").find("div")
         if content_div is None:
             raise RuntimeError(
                 f"Could not locate problem content for problem {number}. "

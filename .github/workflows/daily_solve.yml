@@ -33,23 +33,28 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Restore session cookies
+      - name: Restore session cookies (optional)
         env:
           PE_COOKIES_B64: ${{ secrets.PE_COOKIES_B64 }}
         run: |
           if [ -n "$PE_COOKIES_B64" ]; then
             echo "$PE_COOKIES_B64" | base64 --decode > automation/cookies.json
-            echo "cookies.json restored from secret"
+            echo "cookies.json restored from secret — answer submission enabled"
           else
-            echo "PE_COOKIES_B64 not set – will attempt form login (may fail on CAPTCHA)"
+            echo "PE_COOKIES_B64 not set — will solve & commit without submitting to Project Euler."
+            echo "To enable submission, run 'python -m automation.export_cookies' locally"
+            echo "(you solve the CAPTCHA once) and save the printed value as PE_COOKIES_B64."
           fi
 
       - name: Solve next problem
         env:
           GROQ_API_KEY:     ${{ secrets.GROQ_API_KEY }}
           LLM_PROVIDER:     "groq"
-          PE_USERNAME:      ${{ secrets.PE_USERNAME }}
-          PE_PASSWORD:      ${{ secrets.PE_PASSWORD }}
+          # Submitting to projecteuler.net is OPTIONAL and requires a human-exported
+          # session cookie (PE_COOKIES_B64). The bot never logs in with a password
+          # because PE's sign-in form is CAPTCHA-protected by design. Without a
+          # valid cookie the bot still solves the problem and commits it.
           PE_COOKIES_B64:   ${{ secrets.PE_COOKIES_B64 }}
+          PE_SUBMIT:        "true"
           GIT_PUSH:         "true"
         run: python -m automation.run_daily

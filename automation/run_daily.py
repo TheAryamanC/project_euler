@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from automation.config import GIT_PUSH, MAX_RETRIES, REPO_ROOT
+from automation.config import GIT_PUSH, MAX_RETRIES, PE_SUBMIT, REPO_ROOT
 from automation.euler_client import ProjectEulerClient
 from automation.git_ops import commit_and_push
 from automation.solver import generate_solution
@@ -60,9 +60,13 @@ def _embed_answer_comment(code: str, answer: str) -> str:
 def main() -> int:
     pe = ProjectEulerClient()
 
-    if not pe.login():
-        logger.error("Could not log in to Project Euler – aborting.")
-        return 1
+    # Establishing a projecteuler.net session is OPTIONAL. It is only needed to
+    # submit answers back to PE for profile credit, and PE gates its sign-in
+    # behind a CAPTCHA on purpose — so a human must have exported a session
+    # cookie beforehand (python -m automation.export_cookies). The core job —
+    # fetch today's public problem, solve it, and commit to GitHub — needs no
+    # login at all, so we never abort just because there's no session.
+    can_submit = PE_SUBMIT and pe.ensure_session()
 
     number = _read_next_problem()
     logger.info("Targeting problem %d", number)
@@ -72,8 +76,15 @@ def main() -> int:
     if problem["downloaded_files"]:
         logger.info("Downloaded supplemental files: %s", problem["downloaded_files"])
 
-    def validator(answer: str) -> bool:
-        return pe.submit_answer(number, answer)
+    if can_submit:
+        def validator(answer: str) -> bool:
+            return pe.submit_answer(number, answer)
+    else:
+        logger.info(
+            "No Project Euler submission this run — the solution will be verified "
+            "by executing it locally, then committed to the repository."
+        )
+        validator = None
 
     try:
         code, answer = generate_solution(
@@ -98,7 +109,13 @@ def main() -> int:
     else:
         logger.info("GIT_PUSH is disabled; skipping commit/push.")
 
-    logger.info("  Problem %d solved and committed. Answer: %s", number, answer)
+    verified = "verified by Project Euler" if can_submit else "self-verified locally"
+    logger.info(
+        "Problem %d solved (%s) and committed. Answer: %s",
+        number,
+        verified,
+        answer,
+    )
     return 0
 
 
