@@ -86,7 +86,13 @@ def main() -> int:
 
     if GIT_PUSH:
         extra_files = [REPO_ROOT / "additional_files" / f for f in problem["downloaded_files"]]
-        commit_and_push(dest, number, answer, extra_files=extra_files)
+        commit_and_push(
+            dest,
+            number,
+            answer,
+            extra_files=extra_files,
+            state_file=_STATE_FILE,
+        )
     else:
         logger.info("GIT_PUSH is disabled; skipping commit/push.")
 

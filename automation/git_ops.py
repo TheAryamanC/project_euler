@@ -27,7 +27,13 @@ def ensure_git_identity() -> None:
             logger.debug("Set git config %s = %s", key, value)
 
 
-def commit_and_push(file_path: Path, problem_number: int, answer: str, extra_files: list[Path] | None = None,) -> None:
+def commit_and_push(
+    file_path: Path,
+    problem_number: int,
+    answer: str,
+    extra_files: list[Path] | None = None,
+    state_file: Path | None = None,
+) -> None:
     """Stage file(s), commit, and push"""
     ensure_git_identity()
 
@@ -37,6 +43,9 @@ def commit_and_push(file_path: Path, problem_number: int, answer: str, extra_fil
     for extra in extra_files or []:
         if extra.exists():
             _git("add", str(extra.relative_to(REPO_ROOT)))
+
+    if state_file and state_file.exists():
+        _git("add", str(state_file.relative_to(REPO_ROOT)))
 
     commit_msg = (
         f"solve: Problem {problem_number:03d}\n\n"
